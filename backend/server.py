@@ -16,6 +16,7 @@ import base64
 from io import BytesIO
 from PIL import Image
 import random
+import math
 
 # Import emergent integrations
 from emergentintegrations.llm.chat import LlmChat, UserMessage, ImageContent
