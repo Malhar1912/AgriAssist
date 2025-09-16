@@ -16,10 +16,10 @@ import base64
 from io import BytesIO
 from PIL import Image
 import random
-import math
 
-# Import emergent integrations
-from emergentintegrations.llm.chat import LlmChat, UserMessage, ImageContent
+# Import Langchain integrations
+from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -36,14 +36,14 @@ app = FastAPI()
 api_router = APIRouter(prefix="/api")
 
 # Configuration
-GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY')
+GEMINI_API_KEY = "AIzaSyAkM4DsMMqElorw_bqBwhGwujNBQyiPVc0" # Directly using the provided key
 
 # Models
 class ChatMessage(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     session_id: str
-    message: str
-    response: str
+    message: str # Storing the user's message
+    response: str # Storing the agent's response
     agent_type: str
     timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     metadata: Optional[Dict[str, Any]] = None
@@ -73,12 +73,25 @@ class LoanCalculationRequest(BaseModel):
 # Multi-Agent System
 class AgriAssistAgents:
     def __init__(self):
-        self.query_advisor = None
-        self.plant_detection = None
-        self.financial_advisor = None
-        
-    async def get_query_advisor(self, session_id: str, language: str = "english"):
-        system_message = f"""You are an expert agricultural advisor specializing in Indian farming. 
+        # Langchain models are initialized here, not in separate methods
+        self.query_advisor_model = ChatGoogleGenerativeAI(model="gemini-pro", google_api_key=GEMINI_API_KEY)
+        self.plant_detection_model = ChatGoogleGenerativeAI(model="gemini-pro-vision", google_api_key=GEMINI_API_KEY)
+        self.financial_advisor_model = ChatGoogleGenerativeAI(model="gemini-pro", google_api_key=GEMINI_API_KEY)
+
+    async def _get_chat_history_for_langchain(self, session_id: str, agent_type: str) -> List[Any]:
+        """Fetches chat history for a specific session and agent type, formatted for Langchain."""
+        history = []
+        db_messages = await db.chat_messages.find(
+            {"session_id": session_id, "agent_type": agent_type}
+        ).sort("timestamp", 1).to_list(None) # Get all for the session
+
+        for msg in db_messages:
+            history.append(HumanMessage(content=msg['message']))
+            history.append(AIMessage(content=msg['response']))
+        return history
+
+    async def get_query_advisor_response(self, session_id: str, message: str, language: str = "english") -> str:
+        system_message_content = f"""You are an expert agricultural advisor specializing in Indian farming. 
         Respond in {language} language. 
         
         You provide:
@@ -96,16 +109,20 @@ class AgriAssistAgents:
         IMPORTANT: Use simple formatting without asterisks (*) or complex markdown. Use numbered lists (1., 2., 3.) and simple bullet points (-) only. Avoid using ** for bold text.
         """
         
-        chat = LlmChat(
-            api_key=GEMINI_API_KEY,
-            session_id=f"query_advisor_{session_id}",
-            system_message=system_message
-        ).with_model("gemini", "gemini-2.0-flash")
+        # Fetch history for context
+        history = await self._get_chat_history_for_langchain(session_id, "query_advisor")
         
-        return chat
+        messages = [
+            SystemMessage(content=system_message_content),
+            *history,
+            HumanMessage(content=message)
+        ]
+        
+        response = await self.query_advisor_model.ainvoke(messages)
+        return response.content
     
-    async def get_plant_detection_agent(self, session_id: str, language: str = "english"):
-        system_message = f"""You are an expert plant pathologist and agricultural specialist.
+    async def get_plant_detection_response(self, session_id: str, image_base64: str, language: str = "english") -> str:
+        system_message_content = f"""You are an expert plant pathologist and agricultural specialist.
         Respond in {language} language.
         
         Analyze plant images for:
@@ -127,16 +144,28 @@ class AgriAssistAgents:
         IMPORTANT: Use simple formatting without asterisks (*) or complex markdown. Use numbered lists (1., 2., 3.) and simple bullet points (-) only. Avoid using ** for bold text.
         """
         
-        chat = LlmChat(
-            api_key=GEMINI_API_KEY,
-            session_id=f"plant_detection_{session_id}",
-            system_message=system_message
-        ).with_model("gemini", "gemini-2.0-flash")
+        # For gemini-pro-vision, content is a list of text and image parts
+        # The image needs to be in a specific format for Langchain's HumanMessage
+        image_data = base64.b64decode(image_base64)
         
-        return chat
+        message_content = [
+            {"type": "text", "text": "Analyze this plant image for diseases, pests, or health issues. Provide detailed diagnosis with confidence percentage and treatment recommendations."},
+            {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{image_base64}"}}
+        ]
+
+        # History is not typically used for single image analysis, but can be added if needed
+        # For simplicity, not including chat history for vision model here
+        
+        messages = [
+            SystemMessage(content=system_message_content),
+            HumanMessage(content=message_content)
+        ]
+        
+        response = await self.plant_detection_model.ainvoke(messages)
+        return response.content
     
-    async def get_financial_advisor(self, session_id: str, language: str = "english"):
-        system_message = f"""You are a financial advisor specializing in agricultural finance in India.
+    async def get_financial_advisor_response(self, session_id: str, message: str, language: str = "english") -> str:
+        system_message_content = f"""You are a financial advisor specializing in agricultural finance in India.
         Respond in {language} language.
         
         You provide:
@@ -152,13 +181,17 @@ class AgriAssistAgents:
         IMPORTANT: Use simple formatting without asterisks (*) or complex markdown. Use numbered lists (1., 2., 3.) and simple bullet points (-) only. Avoid using ** for bold text. Write clear, plain text responses.
         """
         
-        chat = LlmChat(
-            api_key=GEMINI_API_KEY,
-            session_id=f"financial_advisor_{session_id}",
-            system_message=system_message
-        ).with_model("gemini", "gemini-2.0-flash")
+        # Fetch history for context
+        history = await self._get_chat_history_for_langchain(session_id, "financial_advisor")
         
-        return chat
+        messages = [
+            SystemMessage(content=system_message_content),
+            *history,
+            HumanMessage(content=message)
+        ]
+        
+        response = await self.financial_advisor_model.ainvoke(messages)
+        return response.content
 
 # Initialize agents
 agents = AgriAssistAgents()
@@ -204,25 +237,21 @@ GOVERNMENT_SCHEMES = [
 @api_router.post("/chat")
 async def chat_with_advisor(request: ChatRequest):
     try:
-        # Get query advisor
-        query_advisor = await agents.get_query_advisor(request.session_id, request.language)
-        
-        # Send message
-        user_message = UserMessage(text=request.message)
-        response = await query_advisor.send_message(user_message)
+        # Get response from query advisor
+        response_content = await agents.get_query_advisor_response(request.session_id, request.message, request.language)
         
         # Save to database
         chat_message = ChatMessage(
             session_id=request.session_id,
             message=request.message,
-            response=response,
+            response=response_content,
             agent_type="query_advisor",
             metadata={"language": request.language}
         )
         
         await db.chat_messages.insert_one(chat_message.dict())
         
-        return {"response": response, "agent_type": "query_advisor"}
+        return {"response": response_content, "agent_type": "query_advisor"}
         
     except Exception as e:
         logging.error(f"Chat error: {e}")
@@ -231,28 +260,17 @@ async def chat_with_advisor(request: ChatRequest):
 @api_router.post("/analyze-plant")
 async def analyze_plant_image(request: PlantAnalysisRequest):
     try:
-        # Get plant detection agent
-        plant_agent = await agents.get_plant_detection_agent(request.session_id, request.language)
+        # Get response from plant detection agent
+        response_content = await agents.get_plant_detection_response(request.session_id, request.image_base64, request.language)
         
-        # Create image content
-        image_content = ImageContent(image_base64=request.image_base64)
-        
-        # Send message with image
-        user_message = UserMessage(
-            text="Analyze this plant image for diseases, pests, or health issues. Provide detailed diagnosis with confidence percentage and treatment recommendations.",
-            file_contents=[image_content]
-        )
-        
-        response = await plant_agent.send_message(user_message)
-        
-        # Extract confidence (mock for now)
+        # Extract confidence (mock for now, as direct confidence from LLM is not standard)
         confidence = random.randint(65, 95)
         
         # Save to database
         chat_message = ChatMessage(
             session_id=request.session_id,
-            message="Plant image analysis",
-            response=response,
+            message="Plant image analysis", # User message for history
+            response=response_content,
             agent_type="plant_detection",
             metadata={"language": request.language, "confidence": confidence}
         )
@@ -260,7 +278,7 @@ async def analyze_plant_image(request: PlantAnalysisRequest):
         await db.chat_messages.insert_one(chat_message.dict())
         
         return {
-            "response": response,
+            "response": response_content,
             "confidence": confidence,
             "agent_type": "plant_detection",
             "escalate_to_officer": confidence < 70
@@ -281,9 +299,6 @@ async def calculate_crop_budget(request: BudgetCalculationRequest):
         expected_revenue = request.expected_yield_tons * 1000 * crop_data["price_per_kg"]  # Convert tons to kg
         profit = expected_revenue - total_cost
         
-        # Get financial advisor analysis
-        financial_advisor = await agents.get_financial_advisor(request.session_id)
-        
         analysis_prompt = f"""Analyze this crop budget:
         Crop: {request.crop}
         Area: {request.area_acres} acres
@@ -297,8 +312,17 @@ async def calculate_crop_budget(request: BudgetCalculationRequest):
         Do not use any asterisks or markdown formatting in your response.
         """
         
-        user_message = UserMessage(text=analysis_prompt)
-        analysis = await financial_advisor.send_message(user_message)
+        analysis_response = await agents.get_financial_advisor_response(request.session_id, analysis_prompt)
+        
+        # Save the interaction to the database
+        chat_message = ChatMessage(
+            session_id=request.session_id,
+            message=analysis_prompt, # Store the prompt sent to the financial advisor
+            response=analysis_response,
+            agent_type="financial_advisor",
+            metadata={"calculation_type": "budget", "crop": request.crop}
+        )
+        await db.chat_messages.insert_one(chat_message.dict())
         
         return {
             "crop": request.crop,
@@ -307,7 +331,7 @@ async def calculate_crop_budget(request: BudgetCalculationRequest):
             "total_cost": total_cost,
             "expected_revenue": expected_revenue,
             "profit": profit,
-            "analysis": analysis,
+            "analysis": analysis_response,
             "agent_type": "financial_advisor"
         }
         
@@ -322,15 +346,47 @@ async def calculate_loan_emi(request: LoanCalculationRequest):
         monthly_rate = request.interest_rate / 12 / 100
         num_payments = request.tenure_years * 12
         
-        emi = (request.principal * monthly_rate * (1 + monthly_rate) ** num_payments) / ((1 + monthly_rate) ** num_payments - 1)
+        # Handle zero interest rate case to avoid division by zero or incorrect formula
+        if monthly_rate == 0:
+            emi = request.principal / num_payments
+        else:
+            emi = (request.principal * monthly_rate * (1 + monthly_rate) ** num_payments) / ((1 + monthly_rate) ** num_payments - 1)
         
+        # Optionally, get financial advisor's additional advice
+        loan_advice_prompt = f"""A user has calculated a loan with the following details:
+        Principal: ₹{request.principal:,}
+        Interest Rate: {request.interest_rate}%
+        Tenure: {request.tenure_years} years
+        Monthly EMI: ₹{round(emi, 2):,}
+        Total Amount Payable: ₹{round(emi * num_payments, 2):,}
+        Total Interest: ₹{round((emi * num_payments) - request.principal, 2):,}
+
+        Provide advice on managing this loan, suggest relevant government schemes, or financial planning tips for farmers in India regarding such a loan.
+        Use simple bullet points with - and numbered lists with 1., 2., 3. 
+        Do not use any asterisks or markdown formatting in your response.
+        """
+        
+        loan_advice_response = await agents.get_financial_advisor_response(request.session_id, loan_advice_prompt)
+
+        # Save the interaction to the database
+        chat_message = ChatMessage(
+            session_id=request.session_id,
+            message=loan_advice_prompt, # Store the prompt sent to the financial advisor
+            response=loan_advice_response,
+            agent_type="financial_advisor",
+            metadata={"calculation_type": "loan", "principal": request.principal, "interest_rate": request.interest_rate, "tenure_years": request.tenure_years}
+        )
+        await db.chat_messages.insert_one(chat_message.dict())
+
         return {
             "principal": request.principal,
             "interest_rate": request.interest_rate,
             "tenure_years": request.tenure_years,
             "monthly_emi": round(emi, 2),
             "total_amount": round(emi * num_payments, 2),
-            "total_interest": round((emi * num_payments) - request.principal, 2)
+            "total_interest": round((emi * num_payments) - request.principal, 2),
+            "financial_advice": loan_advice_response,
+            "agent_type": "financial_advisor"
         }
         
     except Exception as e:
