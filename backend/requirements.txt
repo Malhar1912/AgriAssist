@@ -23,8 +23,9 @@ h11==0.14.0
 
 
 # MongoDB
-motor==4.3.1
+motor==3.7.1
 pymongo==4.5.0
+
 
 # Pydantic / Data validation
 pydantic==2.5.2
