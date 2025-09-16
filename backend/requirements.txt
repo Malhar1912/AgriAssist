@@ -29,5 +29,8 @@ pandas>=2.2.1
 
 # Optional (for async + background tasks)
 anyio>=4.2.0
+# Database
+motor>=3.3.2
+
 
 
