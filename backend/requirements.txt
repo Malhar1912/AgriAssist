@@ -1,6 +1,6 @@
 # FastAPI & ASGI
 fastapi==0.111.1
-starlette==0.29.1
+starlette==0.28.0
 uvicorn[standard]==0.23.2
 python-multipart==1.2.3
 fastuuid==0.1.1
