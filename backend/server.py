@@ -36,7 +36,7 @@ app = FastAPI()
 api_router = APIRouter(prefix="/api")
 
 # Configuration
-GEMINI_API_KEY = "AIzaSyAkM4DsMMqElorw_bqBwhGwujNBQyiPVc0" # Directly using the provided key
+GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY')
 
 # Models
 class ChatMessage(BaseModel):
@@ -73,25 +73,12 @@ class LoanCalculationRequest(BaseModel):
 # Multi-Agent System
 class AgriAssistAgents:
     def __init__(self):
-        # Langchain models are initialized here, not in separate methods
-        self.query_advisor_model = ChatGoogleGenerativeAI(model="gemini-pro", google_api_key=GEMINI_API_KEY)
-        self.plant_detection_model = ChatGoogleGenerativeAI(model="gemini-pro-vision", google_api_key=GEMINI_API_KEY)
-        self.financial_advisor_model = ChatGoogleGenerativeAI(model="gemini-pro", google_api_key=GEMINI_API_KEY)
-
-    async def _get_chat_history_for_langchain(self, session_id: str, agent_type: str) -> List[Any]:
-        """Fetches chat history for a specific session and agent type, formatted for Langchain."""
-        history = []
-        db_messages = await db.chat_messages.find(
-            {"session_id": session_id, "agent_type": agent_type}
-        ).sort("timestamp", 1).to_list(None) # Get all for the session
-
-        for msg in db_messages:
-            history.append(HumanMessage(content=msg['message']))
-            history.append(AIMessage(content=msg['response']))
-        return history
-
-    async def get_query_advisor_response(self, session_id: str, message: str, language: str = "english") -> str:
-        system_message_content = f"""You are an expert agricultural advisor specializing in Indian farming. 
+        self.query_advisor = None
+        self.plant_detection = None
+        self.financial_advisor = None
+        
+    async def get_query_advisor(self, session_id: str, language: str = "english"):
+        system_message = f"""You are an expert agricultural advisor specializing in Indian farming. 
         Respond in {language} language. 
         
         You provide:
@@ -510,4 +497,5 @@ logger = logging.getLogger(__name__)
 
 @app.on_event("shutdown")
 async def shutdown_db_client():
+
     client.close()

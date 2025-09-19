@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Send, Volume2, VolumeX, Plus, Mic, Camera } from 'lucide-react';
+import { translateToEnglish, translateToMalayalam } from '../utils/translationService';
 
 export default function ChatPage({ language, sessionId, onNewChat, initialQuery }) {
   const [messages, setMessages] = useState([]);
@@ -7,6 +8,7 @@ export default function ChatPage({ language, sessionId, onNewChat, initialQuery 
   const [isLoading, setIsLoading] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [isListening, setIsListening] = useState(false);
+  const [isTranslating, setIsTranslating] = useState(false);
   const messagesEndRef = useRef(null);
   const fileInputRef = useRef(null);
 
@@ -18,6 +20,7 @@ export default function ChatPage({ language, sessionId, onNewChat, initialQuery 
       newChat: "New Chat",
       placeholder: "Type your question here...",
       sending: "Sending...",
+      translating: "Translating...",
       textToSpeech: "Text to Speech",
       stopSpeech: "Stop Speech",
       voiceInput: "Voice Input",
@@ -27,6 +30,7 @@ export default function ChatPage({ language, sessionId, onNewChat, initialQuery 
       newChat: "പുതിയ ചാറ്റ്",
       placeholder: "നിങ്ങളുടെ ചോദ്യം ഇവിടെ ടൈപ്പ് ചെയ്യുക...",
       sending: "അയയ്ക്കുന്നു...",
+      translating: "പരിഭാഷ ചെയ്യുന്നു...",
       textToSpeech: "ടെക്സ്റ്റ് ടു സ്പീച്ച്",
       stopSpeech: "സ്പീച്ച് നിർത്തുക",
       voiceInput: "ശബ്ദ ഇൻപുട്ട്",
@@ -61,11 +65,26 @@ export default function ChatPage({ language, sessionId, onNewChat, initialQuery 
     setMessages(prev => [...prev, newMessage]);
     setInputMessage('');
     setIsLoading(true);
+    setIsTranslating(true);
 
     try {
-      const baseURL = import.meta.env.VITE_API_BASE_URL || 'https://agriassist-24.onrender.com/api';
+      const baseURL = import.meta.env.VITE_API_BASE_URL || 'https://agriassist-api123.onrender.com/api';
 
       let response;
+      let translatedMessage = messageText;
+
+      // 🔥 TRANSLATION LOGIC: If UI is Malayalam, translate message to English
+      if (language === 'malayalam' && !imageData) {
+        try {
+          translatedMessage = await translateToEnglish(messageText);
+        } catch (error) {
+          console.error('Translation failed:', error);
+          // Continue with original message if translation fails
+        }
+      }
+
+      setIsTranslating(false);
+
       if (imageData) {
         // Plant analysis API
         response = await fetch(`${baseURL}/analyze-plant`, {
@@ -76,26 +95,40 @@ export default function ChatPage({ language, sessionId, onNewChat, initialQuery 
           body: JSON.stringify({
             session_id: sessionId,
             image_base64: imageData.split(',')[1], // Remove data:image/jpeg;base64, prefix
-            language: language
+            language: "english" // 🔥 CHANGED: Always send english to backend
           })
         });
       } else {
-        // Chat API
+        // Chat API - Always send English to backend
         response = await fetch(`${baseURL}/chat`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            message: messageText,
+            message: translatedMessage, // 🔥 CHANGED: Send translated (English) message
             session_id: sessionId,
-            language: language
+            language: "english" // 🔥 CHANGED: Always send english to backend
           })
         });
       }
 
       if (response.ok) {
-        const responseText = await response.text();
+        const responseData = await response.json(); // 🔥 FIXED: Parse as JSON
+        let responseText = responseData.response || responseData.text || ''; // 🔥 FIXED: Extract response field
+        
+        // 🔥 TRANSLATION LOGIC: If UI is Malayalam, translate response back to Malayalam
+        if (language === 'malayalam') {
+          setIsTranslating(true);
+          try {
+            const translatedResponse = await translateToMalayalam(responseText);
+            responseText = translatedResponse;
+          } catch (error) {
+            console.error('Response translation failed:', error);
+            // Continue with English response if translation fails
+          }
+          setIsTranslating(false);
+        }
 
         const botMessage = {
           id: Date.now() + 1,
@@ -125,6 +158,7 @@ export default function ChatPage({ language, sessionId, onNewChat, initialQuery 
       setMessages(prev => [...prev, errorMessage]);
     } finally {
       setIsLoading(false);
+      setIsTranslating(false);
     }
   };
 
@@ -259,13 +293,16 @@ export default function ChatPage({ language, sessionId, onNewChat, initialQuery 
             </div>
           ))}
 
-          {isLoading && (
+          {(isLoading || isTranslating) && (
             <div className="flex justify-start">
               <div className="bg-white border border-gray-200 rounded-2xl p-4">
                 <div className="flex items-center space-x-2">
                   <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
                   <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
                   <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+                  <span className="text-xs text-gray-500 ml-2">
+                    {isTranslating ? chatTexts[language].translating : chatTexts[language].sending}
+                  </span>
                 </div>
               </div>
             </div>
@@ -315,7 +352,7 @@ export default function ChatPage({ language, sessionId, onNewChat, initialQuery 
 
             <button
               onClick={() => sendMessage()}
-              disabled={!inputMessage.trim() || isLoading}
+              disabled={!inputMessage.trim() || isLoading || isTranslating}
               className="p-3 bg-green-600 text-white rounded-2xl hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-all duration-200"
             >
               <Send className="h-5 w-5" />
