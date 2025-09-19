@@ -17,7 +17,7 @@ from io import BytesIO
 from PIL import Image
 import random
 
-# Import Langchain integrations
+# Import Langchain integrations and checkpoints
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
 
