@@ -15,12 +15,12 @@ export default function TopSchemes({ language, onViewAll }) {
       learnMore: "Learn More",
     },
     malayalam: {
-      title: "പ്രധാन സർക്കാർ പദ്ധതികളും സബ്സിഡികളും",
-      subtitle: "കർഷകർക്കായി ലഭ്യമായ ഏറ്റവും പുതിയ കാർഷിക പദ്ധതികൾ അन്വേषിക്കുക",
-      loading: "പദ്ധതികൾ ലോഡുചെയ്യുन്നു...",
+      title: "പ്രധാന സർക്കാർ പദ്ധതികളും സബ്സിഡികളും",
+      subtitle: "കർഷകർക്കായി ലഭ്യമായ ഏറ്റവും പുതിയ കാർഷിക പദ്ധതികൾ അന്വേഷിക്കുക",
+      loading: "പദ്ധതികൾ ലോഡുചെയ്യുന്നു...",
       error: "പദ്ധതികൾ ലോഡ് ചെയ്യാൻ കഴിഞ്ഞില്ല",
-      viewAll: "എല�ാ പദ്ധതികളും കാണുക",
-      learnMore: "കൂटുതൽ അറിയുക",
+      viewAll: "എല്ലാ പദ്ധതികളും കാണുക",
+      learnMore: "കൂടുതൽ അറിയുക",
     },
   };
 
@@ -47,29 +47,29 @@ export default function TopSchemes({ language, onViewAll }) {
             description:
               language === "english"
                 ? "Financial assistance of ₹6000 per year to all farmer families"
-                : "എല�ാ കർഷക കുടുംബങ്ങൾک്കും വർഷത്തിൽ ₹6000 സാമ്പത്തിക സহായം",
+                : "എല്ലാ കർഷക കുടുംബങ്ങൾക്കും വർഷത്തിൽ ₹6000 സാമ്പത്തിക സഹായം",
             link: "https://pmkisan.gov.in/",
           },
           {
             title:
               language === "english"
                 ? "Soil Health Card Scheme"
-                : "മണ്ണിन്റെ ആരോഗ്യ കാർഡ് പദ്ധതി",
+                : "മണ്ണിന്റെ ആരോഗ്യ കാർഡ് പദ്ധതി",
             description:
               language === "english"
                 ? "Free soil testing and nutrient management recommendations"
-                : "സൗജന്യ മണ്ണ് പരിശോധनയും പോषക പരിപാലन ശുപാർശകളും",
+                : "സൗജന്യ മണ്ണ് പരിശോധനയും പോഷക പരിപാലന ശുപാർശകളും",
             link: "https://soilhealth.dac.gov.in/",
           },
           {
             title:
               language === "english"
                 ? "Pradhan Mantri Fasal Bima Yojana"
-                : "പ്രധാनമन்த्रি ഫസൽ ബീമ യോജन",
+                : "പ്രധാനമന്ത്രി ഫസൽ ബീമ യോജന",
             description:
               language === "english"
                 ? "Crop insurance scheme for farmers against natural calamities"
-                : "പ്രകൃതി ദുരनन्तങ्ङൾک്കെതിരെ കർषകർक്കുള्ळ വിള ഇൻषുറൻസ് പद്ധതി",
+                : "പ്രകൃതി ദുരന്തങ്ങൾക്കെതിരെ കർഷകർക്കുള്ള വിള ഇൻഷുറൻസ് പദ്ധതി",
             link: "https://pmfby.gov.in/",
           },
           {
@@ -78,7 +78,7 @@ export default function TopSchemes({ language, onViewAll }) {
             description:
               language === "english"
                 ? "Easy access to credit for farming activities"
-                : "കാർषിക പ്രवർത്തनങ्ङൾک്കായി എളുप्पത्तിൽ വായ्प ലഭിക്കുन्नതിन്",
+                : "കാർഷിക പ്രവർത്തനങ്ങൾക്കായി എളുപ്പത്തിൽ വായ്പ ലഭിക്കുന്നതിന്",
             link: "https://www.india.gov.in/spotlight/kisan-credit-card-farmers",
           },
         ];

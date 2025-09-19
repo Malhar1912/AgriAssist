@@ -1,16 +1,11 @@
-import { useState, useEffect } from 'react';
-import { MessageCircle, Calendar, Trash2, Loader } from 'lucide-react';
+import { MessageCircle, Calendar, Trash2 } from 'lucide-react';
 
-export default function HistoryPage({ language, onChatSelect, sessionId }) {
-  const [chatHistory, setChatHistory] = useState([]);
-  const [loading, setLoading] = useState(true);
-
+export default function HistoryPage({ language, onChatSelect, onChatDelete, chatSummaries }) {
   const historyTexts = {
     english: {
       title: "Chat History",
       subtitle: "View and continue your previous conversations",
       noHistory: "No chat history found",
-      loading: "Loading history...",
       continue: "Continue Chat",
       delete: "Delete",
       today: "Today",
@@ -22,7 +17,6 @@ export default function HistoryPage({ language, onChatSelect, sessionId }) {
       title: "ചാറ്റ് ചരിത്രം",
       subtitle: "നിങ്ങളുടെ മുൻ സംഭാഷണങ്ങൾ കാണുകയും തുടരുകയും ചെയ്യുക",
       noHistory: "ചാറ്റ് ചരിത്രം കണ്ടെത്തിയില്ല",
-      loading: "ചരിത്രം ലോഡുചെയ്യുന്നു",
       continue: "ചാറ്റ് തുടരുക",
       delete: "ഇല്ലാതാക്കുക",
       today: "ഇന്ന്",
@@ -32,55 +26,11 @@ export default function HistoryPage({ language, onChatSelect, sessionId }) {
     },
   };
 
-  useEffect(() => {
-    if (sessionId) {
-      loadChatHistory(sessionId);
-    } else {
-      setChatHistory([]);
-      setLoading(false);
-    }
-  }, [language, sessionId]);
-
-  const loadChatHistory = async (sessionId) => {
-    try {
-      setLoading(true);
-      const baseURL = import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE_URL;
-      const response = await fetch(`${baseURL}/chat-history/${sessionId}`, {
-        headers: { Accept: 'application/json' },
-      });
-
-      if (!response.ok) throw new Error(`Failed to load history, status: ${response.status}`);
-
-      const data = await response.json();
-
-      if (data.messages && data.messages.length > 0) {
-        const sortedMessages = data.messages.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
-        // Find first user message for timestamp and display text
-        const firstUserMessage = sortedMessages.find(m => m.sender === 'user') || sortedMessages[0];
-        const summary = {
-          id: sessionId,
-          firstMessage: firstUserMessage.text,
-          lastMessage: sortedMessages[sortedMessages.length - 1].text,
-          timestamp: new Date(firstUserMessage.timestamp),
-          messageCount: sortedMessages.length,
-        };
-        setChatHistory([summary]);
-      } else {
-        setChatHistory([]);
-      }
-    } catch (error) {
-      console.error('Error loading chat history:', error);
-      setChatHistory([]);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const getTimeGroup = (timestamp) => {
     const now = new Date();
-    const diffDays = Math.floor((now - new Date(timestamp)) / (1000 * 60 * 60 * 24)) + 1;
-    if (diffDays === 1) return 'today';
-    if (diffDays === 2) return 'yesterday';
+    const diffDays = Math.floor((now - new Date(timestamp)) / (1000 * 60 * 60 * 24));
+    if (diffDays === 0) return 'today';
+    if (diffDays === 1) return 'yesterday';
     if (diffDays <= 7) return 'thisWeek';
     return 'older';
   };
@@ -91,8 +41,6 @@ export default function HistoryPage({ language, onChatSelect, sessionId }) {
       minute: '2-digit',
       hour12: true,
     });
-
-  const deleteChat = (id) => setChatHistory((prev) => prev.filter((c) => c.id !== id));
 
   const groupChatsByTime = (chats) => {
     const groups = { today: [], yesterday: [], thisWeek: [], older: [] };
@@ -133,7 +81,7 @@ export default function HistoryPage({ language, onChatSelect, sessionId }) {
                     {historyTexts[language].continue}
                   </button>
                   <button
-                    onClick={() => deleteChat(id)}
+                    onClick={() => onChatDelete(id)}
                     aria-label={historyTexts[language].delete}
                     className="text-gray-400 hover:text-red-500 p-1"
                     title={historyTexts[language].delete}
@@ -149,26 +97,24 @@ export default function HistoryPage({ language, onChatSelect, sessionId }) {
     );
   };
 
+  const sortedSummaries = [...chatSummaries].sort((a, b) => b.timestamp - a.timestamp);
+  const groupedChats = groupChatsByTime(sortedSummaries);
+
   return (
-    <main className="min-h-screen bg-gray-50 py-8">
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+    <main className="h-full bg-gray-50 py-8 px-4 sm:px-6 lg:px-8 overflow-y-auto">
+      <div className="max-w-4xl mx-auto">
         <header className="text-center mb-8">
           <h1 className="text-3xl font-bold mb-2">{historyTexts[language].title}</h1>
           <p className="text-lg text-gray-600">{historyTexts[language].subtitle}</p>
         </header>
 
-        {loading ? (
-          <div className="flex justify-center items-center h-40">
-            <Loader className="animate-spin text-green-600 w-6 h-6 mr-2" />
-            <span className="text-gray-600">{historyTexts[language].loading}</span>
-          </div>
-        ) : chatHistory.length === 0 ? (
+        {chatSummaries.length === 0 ? (
           <div className="text-center py-12">
             <MessageCircle className="mx-auto w-12 h-12 text-gray-400 mb-4" />
             <p className="text-gray-600">{historyTexts[language].noHistory}</p>
           </div>
         ) : (
-          Object.entries(groupChatsByTime(chatHistory)).map(([group, chats]) => renderGroup(group, chats))
+          Object.entries(groupedChats).map(([group, chats]) => renderGroup(group, chats))
         )}
       </div>
     </main>
