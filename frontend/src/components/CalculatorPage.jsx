@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { Calculator, DollarSign, MessageSquare, Send } from "lucide-react";
+import { Calculator, DollarSign, MessageSquare } from "lucide-react";
+import { translateToMalayalam } from "../utils/translationService"; // Adjust path
 
 export default function CalculatorPage({ language }) {
   const [activeTab, setActiveTab] = useState("loan");
@@ -44,26 +45,48 @@ export default function CalculatorPage({ language }) {
     },
     malayalam: {
       title: "സാമ്പത്തിക കാൽക്കുലേറ്റർ",
-      subtitle: "नിങ്ങളുടെ കാർഷിക ആവശ്യങ്ങൾക്കായി വായ്പകളും ബജറ്റ് ആസൂത്രണвалും കണക്കാക്കുക",
-      loanCalculator: "валായ്പ കാൽക്കുലേറ്റർ",
+      subtitle: "നിങ്ങളുടെ കാർഷിക ആവശ്യങ്ങൾക്കായി വായ്പകളും ബജറ്റ് ആസൂത്രണവും കണക്കാക്കുക",
+      loanCalculator: "വായ്പ കാൽക്കുലേറ്റർ",
       budgetCalculator: "ബജറ്റ് കാൽക്കുലേറ്റർ",
       principal: "പ്രിൻസിപ്പൽ തുക (₹)",
       interestRate: "പലിശ നിരക്ക് (%)",
-      tenure: "കാലാവധി (валർषങ്ങൾ)",
-      crop: "валിള തരം",
-      area: "валിസ്തീർണ്ണം (एक्कർ)",
-      expectedYield: "вал्रതീक्षിक्कുन्न വിളव് (टൺ)",
-      calculate: "валണക്കാक്കുक",
-      calculating: "валണക്കാक्कുन्नു...",
-      monthlyEMI: "вал्रതിമാസ ഇഎംഐ",
-      totalAmount: "മൊത്തം തുक",
+      tenure: "കാലാവധി (വർഷങ്ങൾ)",
+      crop: "വിള തരം",
+      area: "വിസ്തീർണ്ണം (ഏക്കർ)",
+      expectedYield: "പ്രതീക്ഷിക്കുന്ന വിളവ് (ടൺ)",
+      calculate: "കണക്കാക്കുക",
+      calculating: "കണക്കാക്കുന്നു...",
+      monthlyEMI: "പ്രതിമാസ ഇഎംഐ",
+      totalAmount: "മൊത്തം തുക",
       totalInterest: "മൊത്തം പലിശ",
-      totalCost: "മൊത്തം ചിലव്",
-      expectedRevenue: "вал्रതീक्षിक्कുन्न വരുमാनം",
+      totalCost: "മൊത്തം ചിലവ്",
+      expectedRevenue: "പ്രതീക്ഷിക്കുന്ന വരുമാനം",
       profit: "ലാഭം",
       suggestions: "എഐ നിർദ്ദേശങ്ങൾ",
-      noResults: "फലങ്ങൾ കാണാൻ മൂല്യങ്ങൾ നൽകി കണക്കാക്കുക ക�ിക്കുचെയ്യുക",
+      noResults: "ഫലങ്ങൾ കാണാൻ മൂല്യങ്ങൾ നൽകിയ്ക്കുക ക്ലിക്കുചെയ്യുക",
     },
+  };
+
+  const cleanEscapedChars = (text) => {
+    return text
+      .replace(/\\n/g, "\n")
+      .replace(/\\"/g, '"')
+      .replace(/\\'/g, "'")
+      .replace(/\\\\/g, "\\")
+      .replace(/\\t/g, "\t")
+      .replace(/\\r/g, "\r");
+  };
+
+  const translateAndSetSuggestions = async (text) => {
+    let finalText = text;
+    if (language === "malayalam") {
+      try {
+        finalText = await translateToMalayalam(text);
+      } catch (error) {
+        console.error("Translation failed:", error);
+      }
+    }
+    setSuggestions([finalText]);
   };
 
   const calculateLoan = async () => {
@@ -71,15 +94,17 @@ export default function CalculatorPage({ language }) {
       return;
 
     setLoading(true);
+    setLoanResults(null);
+    setSuggestions([]);
+
     try {
       const baseURL =
         import.meta.env.VITE_API_BASE_URL ||
         "https://agriassist-24.onrender.com/api";
+
       const response = await fetch(`${baseURL}/calculate-loan`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           principal: parseFloat(loanData.principal),
           interest_rate: parseFloat(loanData.interestRate),
@@ -90,22 +115,36 @@ export default function CalculatorPage({ language }) {
 
       if (response.ok) {
         const responseText = await response.text();
-        setSuggestions([responseText]);
 
-        // Calculate EMI locally for display
+        let finalResponseText = "";
+
+        try {
+          const parsedResponse = JSON.parse(responseText);
+          finalResponseText =
+            parsedResponse.financial_advice ||
+            parsedResponse.suggestion ||
+            parsedResponse.response ||
+            parsedResponse.text ||
+            "";
+        } catch {
+          finalResponseText = responseText;
+        }
+
+        if (typeof finalResponseText === "string") {
+          finalResponseText = cleanEscapedChars(finalResponseText);
+        }
+
+        await translateAndSetSuggestions(finalResponseText);
+
+        // EMI calculations
         const p = parseFloat(loanData.principal);
         const r = parseFloat(loanData.interestRate) / 100 / 12;
         const n = parseInt(loanData.tenureYears) * 12;
-
         const emi = (p * r * Math.pow(1 + r, n)) / (Math.pow(1 + r, n) - 1);
         const totalAmount = emi * n;
         const totalInterest = totalAmount - p;
 
-        setLoanResults({
-          monthlyEMI: emi,
-          totalAmount: totalAmount,
-          totalInterest: totalInterest,
-        });
+        setLoanResults({ monthlyEMI: emi, totalAmount, totalInterest });
       }
     } catch (error) {
       console.error("Error calculating loan:", error);
@@ -123,15 +162,17 @@ export default function CalculatorPage({ language }) {
       return;
 
     setLoading(true);
+    setBudgetResults(null);
+    setSuggestions([]);
+
     try {
       const baseURL =
         import.meta.env.VITE_API_BASE_URL ||
         "https://agriassist-24.onrender.com/api";
+
       const response = await fetch(`${baseURL}/calculate-budget`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           crop: budgetData.crop,
           area_acres: parseFloat(budgetData.areaAcres),
@@ -142,23 +183,37 @@ export default function CalculatorPage({ language }) {
 
       if (response.ok) {
         const responseText = await response.text();
-        setSuggestions([responseText]);
 
-        // Mock budget calculation for display
+        let finalResponseText = "";
+
+        try {
+          const parsedResponse = JSON.parse(responseText);
+          finalResponseText =
+            parsedResponse.financial_advice ||
+            parsedResponse.suggestion ||
+            parsedResponse.response ||
+            parsedResponse.text ||
+            "";
+        } catch {
+          finalResponseText = responseText;
+        }
+
+        if (typeof finalResponseText === "string") {
+          finalResponseText = cleanEscapedChars(finalResponseText);
+        }
+
+        await translateAndSetSuggestions(finalResponseText);
+
+        // Budget calculations
         const area = parseFloat(budgetData.areaAcres);
         const yieldTons = parseFloat(budgetData.expectedYieldTons);
-        const costPerAcre = 25000; // Mock cost per acre
-        const pricePerTon = 20000; // Mock price per ton
-
+        const costPerAcre = 25000;
+        const pricePerTon = 20000;
         const totalCost = area * costPerAcre;
         const expectedRevenue = yieldTons * pricePerTon;
         const profit = expectedRevenue - totalCost;
 
-        setBudgetResults({
-          totalCost: totalCost,
-          expectedRevenue: expectedRevenue,
-          profit: profit,
-        });
+        setBudgetResults({ totalCost, expectedRevenue, profit });
       }
     } catch (error) {
       console.error("Error calculating budget:", error);
@@ -167,13 +222,12 @@ export default function CalculatorPage({ language }) {
     }
   };
 
-  const formatCurrency = (amount) => {
-    return new Intl.NumberFormat("en-IN", {
+  const formatCurrency = (amount) =>
+    new Intl.NumberFormat("en-IN", {
       style: "currency",
       currency: "INR",
       maximumFractionDigits: 0,
     }).format(amount);
-  };
 
   return (
     <div className="min-h-screen bg-gray-50 py-8">
@@ -295,7 +349,6 @@ export default function CalculatorPage({ language }) {
                         {formatCurrency(loanResults.monthlyEMI)}
                       </p>
                     </div>
-
                     <div className="grid grid-cols-2 gap-4">
                       <div className="bg-blue-50 p-4 rounded-lg">
                         <h4 className="font-semibold text-blue-800">
@@ -305,7 +358,6 @@ export default function CalculatorPage({ language }) {
                           {formatCurrency(loanResults.totalAmount)}
                         </p>
                       </div>
-
                       <div className="bg-orange-50 p-4 rounded-lg">
                         <h4 className="font-semibold text-orange-800">
                           {calculatorTexts[language].totalInterest}
@@ -323,7 +375,6 @@ export default function CalculatorPage({ language }) {
                 <h3 className="text-xl font-semibold text-gray-900 mb-4">
                   {calculatorTexts[language].budgetCalculator}
                 </h3>
-
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     {calculatorTexts[language].crop}
@@ -338,7 +389,6 @@ export default function CalculatorPage({ language }) {
                     placeholder="Rice"
                   />
                 </div>
-
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     {calculatorTexts[language].area}
@@ -357,7 +407,6 @@ export default function CalculatorPage({ language }) {
                     placeholder="2.5"
                   />
                 </div>
-
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     {calculatorTexts[language].expectedYield}
@@ -376,7 +425,6 @@ export default function CalculatorPage({ language }) {
                     placeholder="15"
                   />
                 </div>
-
                 <button
                   onClick={calculateBudget}
                   disabled={loading}
@@ -386,8 +434,6 @@ export default function CalculatorPage({ language }) {
                     ? calculatorTexts[language].calculating
                     : calculatorTexts[language].calculate}
                 </button>
-
-                {/* Budget Results */}
                 {budgetResults && (
                   <div className="mt-6 space-y-4">
                     <div className="grid grid-cols-1 gap-4">
@@ -399,7 +445,6 @@ export default function CalculatorPage({ language }) {
                           {formatCurrency(budgetResults.totalCost)}
                         </p>
                       </div>
-
                       <div className="bg-blue-50 p-4 rounded-lg">
                         <h4 className="font-semibold text-blue-800">
                           {calculatorTexts[language].expectedRevenue}
@@ -408,17 +453,26 @@ export default function CalculatorPage({ language }) {
                           {formatCurrency(budgetResults.expectedRevenue)}
                         </p>
                       </div>
-
                       <div
-                        className={`p-4 rounded-lg ${budgetResults.profit >= 0 ? "bg-green-50" : "bg-red-50"}`}
+                        className={`p-4 rounded-lg ${
+                          budgetResults.profit >= 0 ? "bg-green-50" : "bg-red-50"
+                        }`}
                       >
                         <h4
-                          className={`font-semibold ${budgetResults.profit >= 0 ? "text-green-800" : "text-red-800"}`}
+                          className={`font-semibold ${
+                            budgetResults.profit >= 0
+                              ? "text-green-800"
+                              : "text-red-800"
+                          }`}
                         >
                           {calculatorTexts[language].profit}
                         </h4>
                         <p
-                          className={`text-2xl font-bold ${budgetResults.profit >= 0 ? "text-green-900" : "text-red-900"}`}
+                          className={`text-2xl font-bold ${
+                            budgetResults.profit >= 0
+                              ? "text-green-900"
+                              : "text-red-900"
+                          }`}
                         >
                           {formatCurrency(budgetResults.profit)}
                         </p>
@@ -429,8 +483,6 @@ export default function CalculatorPage({ language }) {
               </div>
             )}
           </div>
-
-          {/* Suggestions Panel */}
           <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-200">
             <div className="flex items-center space-x-2 mb-4">
               <MessageSquare className="h-5 w-5 text-green-600" />
@@ -438,7 +490,6 @@ export default function CalculatorPage({ language }) {
                 {calculatorTexts[language].suggestions}
               </h3>
             </div>
-
             <div className="min-h-[400px]">
               {suggestions.length === 0 ? (
                 <div className="flex items-center justify-center h-full text-gray-500">

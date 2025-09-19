@@ -115,7 +115,7 @@ export default function InformationPage({ language }) {
       weatherAlerts: "Weather Alerts",
       cropAdvisory: "Crop Advisory",
       governmentSchemes: "Government Schemes & Subsidies",
-      schemesSubtitle: "Explore available schemes and subsidies for farmers",
+      schemesSubtitle: "Explore available schemes and subsidies for you",
       loading: "Loading...",
       error: "Failed to load data",
       learnMore: "Learn More",
@@ -130,7 +130,7 @@ export default function InformationPage({ language }) {
       cropAdvisory: "വിള ഉപദേശം",
       governmentSchemes: "സർക്കാർ പദ്ധതികളും സബ്സിഡികളും",
       schemesSubtitle:
-        "കർഷകർക്കായി ലഭ്യമായ പദ്ധതികളും സബ്സിഡികളും അന്വേഷിക്കുക",
+        "നിങ്ങൾക്ക് കിട്ടുന്ന പദ്ധതികളും സബ്സിഡികളും നോക്കാം",
       loading: "ലോഡുചെയ്യുന്നു...",
       error: "ഡാറ്റ ലോഡ് ചെയ്യാൻ കഴിഞ്ഞില്ല",
       learnMore: "കൂടുതൽ അറിയുക",

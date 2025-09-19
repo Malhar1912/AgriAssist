@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Navbar from "../components/Navbar";
 import HeroSection from "../components/HeroSection";
 import InfoCards from "../components/InfoCards";
@@ -12,17 +12,42 @@ export default function HomePage() {
   const [language, setLanguage] = useState("english");
   const [currentPage, setCurrentPage] = useState("home");
   const [currentChatId, setCurrentChatId] = useState(null);
-  const [initialQuery, setInitialQuery] = useState(null); // 👈 New state to store the initial query
+  const [initialQuery, setInitialQuery] = useState(null);
+
+  // Lifted chat state
+  const [chatMessages, setChatMessages] = useState([]);
+  const [chatInputMessage, setChatInputMessage] = useState("");
+
+  useEffect(() => {
+    // Check on mount for existing session ID in localStorage
+    const storedSessionId = localStorage.getItem("session_id");
+    if (storedSessionId) {
+      setCurrentChatId(storedSessionId);
+    } else {
+      const newSessionId = `chat_${Date.now()}`;
+      setCurrentChatId(newSessionId);
+      localStorage.setItem("session_id", newSessionId);
+    }
+  }, []);
+
+  // Update localStorage whenever currentChatId changes
+  useEffect(() => {
+    if (currentChatId) {
+      localStorage.setItem("session_id", currentChatId);
+    }
+  }, [currentChatId]);
 
   const toggleLanguage = () => {
     setLanguage((prev) => (prev === "english" ? "malayalam" : "english"));
   };
 
+  // When starting a new chat from search, reset messages/input too
   const handleSearch = (query, imageData = null) => {
-    // Generate new chat session ID
     const sessionId = `chat_${Date.now()}`;
     setCurrentChatId(sessionId);
-    setInitialQuery(query); // 👈 Set the initial query here
+    setInitialQuery(query);
+    setChatMessages([]);
+    setChatInputMessage("");
     setCurrentPage("chat");
   };
 
@@ -38,10 +63,10 @@ export default function HomePage() {
       searchPlaceholder: "Ask anything about farming, crops, or agriculture...",
     },
     malayalam: {
-      title: "കൃഷിസഹായി - നിങ്ങളുടെ ബുद്ധിമാनായ കൃषി സहായി",
+      title: "കൃഷിസഹായി - നിങ്ങളുടെ ബുദ്ധിമാനായ കൃഷി സഹായി",
       subtitle:
-        "വിദഗ്ധ കാർഷിക ഉപദേശം, സാമ്പത്തിക ആസൂത്രണം, തത്സമയ വിപണി വിവരങ്ങൾ എn്നിവ നേटുക",
-      searchPlaceholder: "കൃषി, വിളകൾ അലെങ്കിൽ കൃषിയെക്കുറിച്ച് എnതും ചോദിക്കുക...",
+        "വിദഗ്ധ കാർഷിക ഉപദേശം, സാമ്പത്തിക ആസൂത്രണം, തത്സമയ വിപണി വിവരങ്ങൾ എന്നിവ നേടുക",
+      searchPlaceholder: "കൃഷി, വിളകൾ അല്ലെങ്കിൽ കൃഷിയെക്കുറിച്ച് എന്തും ചോദിക്കുക...",
     },
   };
 
@@ -65,17 +90,24 @@ export default function HomePage() {
             language={language}
             sessionId={currentChatId}
             onNewChat={() => {
-              const sessionId = `chat_${Date.now()}`;
-              setCurrentChatId(sessionId);
-              setInitialQuery(null); // 👈 Clear the query when starting a new chat
+              const newSessionId = `chat_${Date.now()}`;
+              setCurrentChatId(newSessionId);
+              setInitialQuery(null);
+              setChatMessages([]);
+              setChatInputMessage("");
             }}
-            initialQuery={initialQuery} // 👈 Pass the initial query to the ChatPage component
+            initialQuery={initialQuery}
+            messages={chatMessages}
+            setMessages={setChatMessages}
+            inputMessage={chatInputMessage}
+            setInputMessage={setChatInputMessage}
           />
         );
       case "history":
         return (
           <HistoryPage
             language={language}
+            sessionId={currentChatId}
             onChatSelect={(chatId) => {
               setCurrentChatId(chatId);
               setCurrentPage("chat");
@@ -110,9 +142,7 @@ export default function HomePage() {
         currentPage={currentPage}
         setCurrentPage={setCurrentPage}
       />
-      <div>
-      {renderCurrentPage()}
-      </div>
+      <div>{renderCurrentPage()}</div>
     </div>
   );
 }

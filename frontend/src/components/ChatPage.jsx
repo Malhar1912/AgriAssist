@@ -1,14 +1,22 @@
-import { useState, useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Send, Volume2, VolumeX, Plus, Mic, Camera } from 'lucide-react';
 import { translateToEnglish, translateToMalayalam } from '../utils/translationService';
 
-export default function ChatPage({ language, sessionId, onNewChat, initialQuery }) {
-  const [messages, setMessages] = useState([]);
-  const [inputMessage, setInputMessage] = useState('');
+export default function ChatPage({
+  language,
+  sessionId: propSessionId,
+  onNewChat,
+  initialQuery,
+  messages,
+  setMessages,
+  inputMessage,
+  setInputMessage
+}) {
   const [isLoading, setIsLoading] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const [isTranslating, setIsTranslating] = useState(false);
+  const [sessionId, setSessionId] = useState(propSessionId || null);
   const messagesEndRef = useRef(null);
   const fileInputRef = useRef(null);
 
@@ -33,22 +41,92 @@ export default function ChatPage({ language, sessionId, onNewChat, initialQuery 
       translating: "പരിഭാഷ ചെയ്യുന്നു...",
       textToSpeech: "ടെക്സ്റ്റ് ടു സ്പീച്ച്",
       stopSpeech: "സ്പീച്ച് നിർത്തുക",
-      voiceInput: "ശബ്ദ ഇൻപുട്ട്",
-      imageUpload: "ചിത്രം അപ്‌ലോഡ് ചെയ്യുക"
+      voiceInput: "ശബ്ദ ইন്പുട്ട്",
+      imageUpload: "ചിത്രം അപ്ലോഡ് ചെയ്യുക"
     }
   };
 
   useEffect(() => {
-    // 👈 Check for an initial query and if it has not been processed yet
-    if (initialQuery && !initialQueryProcessed.current) {
-      sendMessage(initialQuery);
-      initialQueryProcessed.current = true; // Mark as processed
+    // Use session ID from props or localStorage at mount
+    if (!sessionId) {
+      const storedId = localStorage.getItem('session_id');
+      if (storedId) {
+        setSessionId(storedId);
+      }
     }
+  }, []);
+
+  // New effect to load chat history when sessionId changes
+  useEffect(() => {
+    if (sessionId) {
+      loadFullChatHistory(sessionId);
+    }
+  }, [sessionId]);
+
+  // Load full chat history for continuation
+  const loadFullChatHistory = async (sessionId) => {
+    try {
+      setIsLoading(true);
+      const baseURL = import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE_URL;
+      const response = await fetch(`${baseURL}/chat-history/${sessionId}`, {
+        headers: { Accept: 'application/json' },
+      });
+
+      if (!response.ok) throw new Error(`Failed to load chat history, status: ${response.status}`);
+
+      const data = await response.json();
+
+      if (data.messages && data.messages.length > 0) {
+        const sortedMessages = data.messages.sort(
+          (a, b) => new Date(a.timestamp) - new Date(b.timestamp)
+        );
+
+        const loadedMessages = [];
+        sortedMessages.forEach((item) => {
+          if (item.message) {
+            loadedMessages.push({
+              id: item.id + '_user',
+              text: item.message,
+              sender: 'user',
+              timestamp: new Date(item.timestamp),
+            });
+          }
+          if (item.response) {
+            loadedMessages.push({
+              id: item.id + '_bot',
+              text: item.response,
+              sender: 'bot',
+              timestamp: new Date(item.timestamp),
+            });
+          }
+        });
+
+        setMessages(loadedMessages);
+      } else {
+        setMessages([]);
+      }
+    } catch (error) {
+      console.error('Error loading full chat history:', error);
+      setMessages([]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (initialQuery && !initialQueryProcessed.current && messages.length === 0) {
+      sendMessage(initialQuery);
+      setInputMessage(initialQuery);
+      initialQueryProcessed.current = true;
+    }
+  }, [initialQuery]);
+
+  useEffect(() => {
     scrollToBottom();
-  }, [initialQuery, sessionId, messages]);
+  }, [messages]);
 
   const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
   const sendMessage = async (messageText = inputMessage, imageData = null) => {
@@ -59,10 +137,10 @@ export default function ChatPage({ language, sessionId, onNewChat, initialQuery 
       text: messageText,
       sender: 'user',
       timestamp: new Date(),
-      imageData: imageData
+      imageData: imageData,
     };
 
-    setMessages(prev => [...prev, newMessage]);
+    setMessages((prev) => [...prev, newMessage]);
     setInputMessage('');
     setIsLoading(true);
     setIsTranslating(true);
@@ -73,79 +151,95 @@ export default function ChatPage({ language, sessionId, onNewChat, initialQuery 
       let response;
       let translatedMessage = messageText;
 
-      // 🔥 TRANSLATION LOGIC: If UI is Malayalam, translate message to English
       if (language === 'malayalam' && !imageData) {
         try {
           translatedMessage = await translateToEnglish(messageText);
         } catch (error) {
           console.error('Translation failed:', error);
-          // Continue with original message if translation fails
         }
       }
 
       setIsTranslating(false);
 
-      if (imageData) {
-        // Plant analysis API
-        response = await fetch(`${baseURL}/analyze-plant`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
+      const bodyPayload = imageData
+        ? {
             session_id: sessionId,
-            image_base64: imageData.split(',')[1], // Remove data:image/jpeg;base64, prefix
-            language: "english" // 🔥 CHANGED: Always send english to backend
-          })
-        });
-      } else {
-        // Chat API - Always send English to backend
-        response = await fetch(`${baseURL}/chat`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            message: translatedMessage, // 🔥 CHANGED: Send translated (English) message
+            image_base64: imageData.split(',')[1],
+            language: 'english',
+          }
+        : {
+            message: translatedMessage,
             session_id: sessionId,
-            language: "english" // 🔥 CHANGED: Always send english to backend
-          })
-        });
-      }
+            language: 'english',
+          };
+
+      const endpoint = imageData ? '/analyze-plant' : '/chat';
+
+      response = await fetch(`${baseURL}${endpoint}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(bodyPayload),
+      });
 
       if (response.ok) {
-        const responseData = await response.json(); // 🔥 FIXED: Parse as JSON
-        let responseText = responseData.response || responseData.text || ''; // 🔥 FIXED: Extract response field
-        
-        // 🔥 TRANSLATION LOGIC: If UI is Malayalam, translate response back to Malayalam
+        const responseText = await response.text();
+
+        let finalResponseText = '';
+
+        try {
+          const parsedResponse = JSON.parse(responseText);
+
+          if (parsedResponse.session_id && parsedResponse.session_id !== sessionId) {
+            setSessionId(parsedResponse.session_id);
+            localStorage.setItem('session_id', parsedResponse.session_id);
+          }
+
+          finalResponseText =
+            parsedResponse.response || parsedResponse.text || parsedResponse.message || '';
+        } catch (parseError) {
+          console.error('JSON parse error:', parseError);
+          finalResponseText = responseText;
+        }
+
+        if (typeof finalResponseText === 'string') {
+          finalResponseText = finalResponseText
+            .replace(/\\n/g, '\n')
+            .replace(/\\"/g, '"')
+            .replace(/\\'/g, "'")
+            .replace(/\\\\/g, '\\')
+            .replace(/\\t/g, '\t')
+            .replace(/\\r/g, '\r');
+        }
+
         if (language === 'malayalam') {
           setIsTranslating(true);
           try {
-            const translatedResponse = await translateToMalayalam(responseText);
-            responseText = translatedResponse;
+            const translatedResponse = await translateToMalayalam(finalResponseText);
+            finalResponseText = translatedResponse;
           } catch (error) {
             console.error('Response translation failed:', error);
-            // Continue with English response if translation fails
           }
           setIsTranslating(false);
         }
 
         const botMessage = {
           id: Date.now() + 1,
-          text: responseText,
+          text: finalResponseText,
           sender: 'bot',
-          timestamp: new Date()
+          timestamp: new Date(),
         };
 
-        setMessages(prev => [...prev, botMessage]);
+        setMessages((prev) => [...prev, botMessage]);
       } else {
         const errorMessage = {
           id: Date.now() + 1,
           text: language === 'malayalam' ? 'ക്ഷമിക്കണം, എന്തോ തെറ്റുപറ്റി' : 'Sorry, something went wrong',
           sender: 'bot',
-          timestamp: new Date()
+          timestamp: new Date(),
         };
-        setMessages(prev => [...prev, errorMessage]);
+        setMessages((prev) => [...prev, errorMessage]);
       }
     } catch (error) {
       console.error('Error sending message:', error);
@@ -153,9 +247,9 @@ export default function ChatPage({ language, sessionId, onNewChat, initialQuery 
         id: Date.now() + 1,
         text: language === 'malayalam' ? 'ക്ഷമിക്കണം, എന്തോ തെറ്റുപറ്റി' : 'Sorry, something went wrong',
         sender: 'bot',
-        timestamp: new Date()
+        timestamp: new Date(),
       };
-      setMessages(prev => [...prev, errorMessage]);
+      setMessages((prev) => [...prev, errorMessage]);
     } finally {
       setIsLoading(false);
       setIsTranslating(false);
@@ -164,7 +258,6 @@ export default function ChatPage({ language, sessionId, onNewChat, initialQuery 
 
   const speakText = (text) => {
     if ('speechSynthesis' in window) {
-      // Stop any ongoing speech
       window.speechSynthesis.cancel();
 
       const utterance = new SpeechSynthesisUtterance(text);
@@ -213,7 +306,10 @@ export default function ChatPage({ language, sessionId, onNewChat, initialQuery 
     if (file) {
       const reader = new FileReader();
       reader.onload = (e) => {
-        sendMessage(`[${language === 'malayalam' ? 'ചിത്രം അപ്‌ലോഡ് ചെയ്തു' : 'Image uploaded'}: ${file.name}]`, e.target.result);
+        sendMessage(
+          `[${language === 'malayalam' ? 'ചിത്രം അപ്‌ലോഡ് ചെയ്തു' : 'Image uploaded'}: ${file.name}]`,
+          e.target.result
+        );
       };
       reader.readAsDataURL(file);
     }
@@ -254,25 +350,17 @@ export default function ChatPage({ language, sessionId, onNewChat, initialQuery 
             >
               <div
                 className={`max-w-3xl rounded-2xl p-4 ${
-                  message.sender === 'user'
-                    ? 'bg-green-600 text-white'
-                    : 'bg-white text-gray-900 border border-gray-200'
+                  message.sender === 'user' ? 'bg-green-600 text-white' : 'bg-white text-gray-900 border border-gray-200'
                 }`}
               >
                 {message.imageData && (
-                  <img
-                    src={message.imageData}
-                    alt="Uploaded"
-                    className="max-w-xs rounded-lg mb-2"
-                  />
+                  <img src={message.imageData} alt="Uploaded" className="max-w-xs rounded-lg mb-2" />
                 )}
-                <p className="text-sm leading-relaxed whitespace-pre-wrap">
-                  {message.text}
-                </p>
+                <p className="text-sm leading-relaxed whitespace-pre-wrap">{message.text}</p>
                 {message.sender === 'bot' && (
                   <div className="flex items-center space-x-2 mt-2">
                     <button
-                      onClick={() => isSpeaking ? stopSpeaking() : speakText(message.text)}
+                      onClick={() => (isSpeaking ? stopSpeaking() : speakText(message.text))}
                       className="flex items-center space-x-1 text-xs text-gray-600 hover:text-green-600 transition-colors duration-200"
                     >
                       {isSpeaking ? (
@@ -298,8 +386,14 @@ export default function ChatPage({ language, sessionId, onNewChat, initialQuery 
               <div className="bg-white border border-gray-200 rounded-2xl p-4">
                 <div className="flex items-center space-x-2">
                   <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
-                  <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
-                  <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+                  <div
+                    className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"
+                    style={{ animationDelay: '0.1s' }}
+                  ></div>
+                  <div
+                    className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"
+                    style={{ animationDelay: '0.2s' }}
+                  ></div>
                   <span className="text-xs text-gray-500 ml-2">
                     {isTranslating ? chatTexts[language].translating : chatTexts[language].sending}
                   </span>
