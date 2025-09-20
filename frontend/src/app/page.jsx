@@ -3,8 +3,7 @@ import Navbar from "../components/Navbar";
 import HeroSection from "../components/HeroSection";
 import InfoCards from "../components/InfoCards";
 import TopSchemes from "../components/TopSchemes";
-import ChatPage from "../components/ChatPage";
-import HistoryPage from "../components/HistoryPage";
+import ChatWithHistory from "../components/ChatWithHistory";
 import CalculatorPage from "../components/CalculatorPage";
 import InformationPage from "../components/InformationPage";
 
@@ -13,10 +12,6 @@ export default function HomePage() {
   const [currentPage, setCurrentPage] = useState("home");
   const [currentChatId, setCurrentChatId] = useState(null);
   const [initialQuery, setInitialQuery] = useState(null);
-
-  // Lifted chat state
-  const [chatMessages, setChatMessages] = useState([]);
-  const [chatInputMessage, setChatInputMessage] = useState("");
 
   useEffect(() => {
     // Check on mount for existing session ID in localStorage
@@ -46,8 +41,6 @@ export default function HomePage() {
     const sessionId = `chat_${Date.now()}`;
     setCurrentChatId(sessionId);
     setInitialQuery(query);
-    setChatMessages([]);
-    setChatInputMessage("");
     setCurrentPage("chat");
   };
 
@@ -85,34 +78,10 @@ export default function HomePage() {
           </>
         );
       case "chat":
-        return (
-          <ChatPage
-            language={language}
-            sessionId={currentChatId}
-            onNewChat={() => {
-              const newSessionId = `chat_${Date.now()}`;
-              setCurrentChatId(newSessionId);
-              setInitialQuery(null);
-              setChatMessages([]);
-              setChatInputMessage("");
-            }}
-            initialQuery={initialQuery}
-            messages={chatMessages}
-            setMessages={setChatMessages}
-            inputMessage={chatInputMessage}
-            setInputMessage={setChatInputMessage}
-          />
-        );
       case "history":
+        // Pass initialQuery to ChatWithHistory
         return (
-          <HistoryPage
-            language={language}
-            sessionId={currentChatId}
-            onChatSelect={(chatId) => {
-              setCurrentChatId(chatId);
-              setCurrentPage("chat");
-            }}
-          />
+          <ChatWithHistory language={language} initialQuery={initialQuery} />
         );
       case "calculator":
         return <CalculatorPage language={language} />;
@@ -134,7 +103,7 @@ export default function HomePage() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="flex flex-col min-h-screen bg-gray-50">
       <Navbar
         language={language}
         toggleLanguage={toggleLanguage}
@@ -142,7 +111,10 @@ export default function HomePage() {
         currentPage={currentPage}
         setCurrentPage={setCurrentPage}
       />
-      <div>{renderCurrentPage()}</div>
+      {/* Added pt-16 to create space below the navbar. Adjust if needed. */}
+      <div className="flex-1 overflow-hidden">
+        {renderCurrentPage()}
+      </div>
     </div>
   );
 }

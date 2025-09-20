@@ -4,23 +4,23 @@ import { translateToEnglish, translateToMalayalam } from '../utils/translationSe
 
 export default function ChatPage({
   language,
-  sessionId: propSessionId,
+  sessionId,
   onNewChat,
   initialQuery,
   messages,
   setMessages,
   inputMessage,
-  setInputMessage
+  setInputMessage,
+  loadingMessages = false,
+  setLoadingMessages, // Accept the new prop
 }) {
-  const [isLoading, setIsLoading] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const [isTranslating, setIsTranslating] = useState(false);
-  const [sessionId, setSessionId] = useState(propSessionId || null);
   const messagesEndRef = useRef(null);
   const fileInputRef = useRef(null);
 
-  // 👈 Use a ref to ensure the initial query is only processed once.
+  // Ref to ensure initial query processed only once
   const initialQueryProcessed = useRef(false);
 
   const chatTexts = {
@@ -41,85 +41,18 @@ export default function ChatPage({
       translating: "പരിഭാഷ ചെയ്യുന്നു...",
       textToSpeech: "ടെക്സ്റ്റ് ടു സ്പീച്ച്",
       stopSpeech: "സ്പീച്ച് നിർത്തുക",
-      voiceInput: "ശബ്ദ ইন്പുട്ട്",
+      voiceInput: "ശബ്ദ ഇൻ്പുട്ട്",
       imageUpload: "ചിത്രം അപ്ലോഡ് ചെയ്യുക"
     }
   };
 
   useEffect(() => {
-    // Use session ID from props or localStorage at mount
-    if (!sessionId) {
-      const storedId = localStorage.getItem('session_id');
-      if (storedId) {
-        setSessionId(storedId);
-      }
-    }
-  }, []);
-
-  // New effect to load chat history when sessionId changes
-  useEffect(() => {
-    if (sessionId) {
-      loadFullChatHistory(sessionId);
-    }
-  }, [sessionId]);
-
-  // Load full chat history for continuation
-  const loadFullChatHistory = async (sessionId) => {
-    try {
-      setIsLoading(true);
-      const baseURL = import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE_URL;
-      const response = await fetch(`${baseURL}/chat-history/${sessionId}`, {
-        headers: { Accept: 'application/json' },
-      });
-
-      if (!response.ok) throw new Error(`Failed to load chat history, status: ${response.status}`);
-
-      const data = await response.json();
-
-      if (data.messages && data.messages.length > 0) {
-        const sortedMessages = data.messages.sort(
-          (a, b) => new Date(a.timestamp) - new Date(b.timestamp)
-        );
-
-        const loadedMessages = [];
-        sortedMessages.forEach((item) => {
-          if (item.message) {
-            loadedMessages.push({
-              id: item.id + '_user',
-              text: item.message,
-              sender: 'user',
-              timestamp: new Date(item.timestamp),
-            });
-          }
-          if (item.response) {
-            loadedMessages.push({
-              id: item.id + '_bot',
-              text: item.response,
-              sender: 'bot',
-              timestamp: new Date(item.timestamp),
-            });
-          }
-        });
-
-        setMessages(loadedMessages);
-      } else {
-        setMessages([]);
-      }
-    } catch (error) {
-      console.error('Error loading full chat history:', error);
-      setMessages([]);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    if (initialQuery && !initialQueryProcessed.current && messages.length === 0) {
+    if (initialQuery && !initialQueryProcessed.current && messages.length === 0 && sessionId) {
       sendMessage(initialQuery);
       setInputMessage(initialQuery);
       initialQueryProcessed.current = true;
     }
-  }, [initialQuery]);
+  }, [initialQuery, sessionId]);
 
   useEffect(() => {
     scrollToBottom();
@@ -130,6 +63,11 @@ export default function ChatPage({
   };
 
   const sendMessage = async (messageText = inputMessage, imageData = null) => {
+    if (!sessionId || typeof sessionId !== 'string' || sessionId.trim() === '') {
+      console.error('Invalid sessionId:', sessionId);
+      return;
+    }
+
     if (!messageText.trim() && !imageData) return;
 
     const newMessage = {
@@ -142,8 +80,7 @@ export default function ChatPage({
 
     setMessages((prev) => [...prev, newMessage]);
     setInputMessage('');
-    setIsLoading(true);
-    setIsTranslating(true);
+    setLoadingMessages(true); // <--- START LOADING ANIMATION
 
     try {
       const baseURL = import.meta.env.VITE_API_BASE_URL || 'https://agriassist-api123.onrender.com/api';
@@ -158,8 +95,6 @@ export default function ChatPage({
           console.error('Translation failed:', error);
         }
       }
-
-      setIsTranslating(false);
 
       const bodyPayload = imageData
         ? {
@@ -185,17 +120,10 @@ export default function ChatPage({
 
       if (response.ok) {
         const responseText = await response.text();
-
         let finalResponseText = '';
 
         try {
           const parsedResponse = JSON.parse(responseText);
-
-          if (parsedResponse.session_id && parsedResponse.session_id !== sessionId) {
-            setSessionId(parsedResponse.session_id);
-            localStorage.setItem('session_id', parsedResponse.session_id);
-          }
-
           finalResponseText =
             parsedResponse.response || parsedResponse.text || parsedResponse.message || '';
         } catch (parseError) {
@@ -251,8 +179,7 @@ export default function ChatPage({
       };
       setMessages((prev) => [...prev, errorMessage]);
     } finally {
-      setIsLoading(false);
-      setIsTranslating(false);
+      setLoadingMessages(false); // <--- STOP LOADING ANIMATION (regardless of success or failure)
     }
   };
 
@@ -350,7 +277,9 @@ export default function ChatPage({
             >
               <div
                 className={`max-w-3xl rounded-2xl p-4 ${
-                  message.sender === 'user' ? 'bg-green-600 text-white' : 'bg-white text-gray-900 border border-gray-200'
+                  message.sender === 'user'
+                    ? 'bg-green-600 text-white'
+                    : 'bg-white text-gray-900 border border-gray-200'
                 }`}
               >
                 {message.imageData && (
@@ -381,7 +310,7 @@ export default function ChatPage({
             </div>
           ))}
 
-          {(isLoading || isTranslating) && (
+          {(loadingMessages || isTranslating) && (
             <div className="flex justify-start">
               <div className="bg-white border border-gray-200 rounded-2xl p-4">
                 <div className="flex items-center space-x-2">
@@ -446,7 +375,7 @@ export default function ChatPage({
 
             <button
               onClick={() => sendMessage()}
-              disabled={!inputMessage.trim() || isLoading || isTranslating}
+              disabled={!inputMessage.trim() || loadingMessages || isTranslating}
               className="p-3 bg-green-600 text-white rounded-2xl hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-all duration-200"
             >
               <Send className="h-5 w-5" />
@@ -456,13 +385,7 @@ export default function ChatPage({
       </div>
 
       {/* Hidden file input */}
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept="image/*"
-        onChange={handleImageUpload}
-        className="hidden"
-      />
+      <input ref={fileInputRef} type="file" accept="image/*" onChange={handleImageUpload} className="hidden" />
     </div>
   );
 }

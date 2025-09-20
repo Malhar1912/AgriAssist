@@ -13,27 +13,23 @@ export default function Navbar({
   const navTexts = {
     english: {
       home: "Home",
-      history: "History",
       calculator: "Financial Calculator",
       information: "Information",
-      chat: "Chat", // Added chat translation
+      chat: "Chat",
       language: "മലയാളം",
     },
     malayalam: {
       home: "ഹോം",
-      history: "ചരിത്രം", // Corrected translation
-      calculator: "സാമ്പത്തിക കാൽക്കുലേറ്റർ", // Corrected translation
-      information: "വിവരങ്ങൾ", // Corrected translation
-      chat: "ചാറ്റ്", // Added chat translation
+      calculator: "സാമ്പത്തിക കാൽക്കുലേറ്റർ",
+      information: "വിവരങ്ങൾ",
+      chat: "ചാറ്റ്",
       language: "English",
     },
   };
 
   const navItems = [
     { name: navTexts[language].home, page: "home", key: "home" },
-    { name: navTexts[language].chat, page: "chat", key: "chat" },
-    { name: navTexts[language].history, page: "history", key: "history" },
-    
+    { name: navTexts[language].chat, page: "chat", key: "chat" }, // Single Chat button only
     {
       name: navTexts[language].calculator,
       page: "calculator",
@@ -43,8 +39,7 @@ export default function Navbar({
       name: navTexts[language].information,
       page: "information",
       key: "information",
-    }
-    
+    },
   ];
 
   const handleNavigation = (page) => {
@@ -105,13 +100,9 @@ export default function Navbar({
               <button
                 onClick={() => setIsMenuOpen(!isMenuOpen)}
                 className="inline-flex items-center justify-center p-2 rounded-md text-gray-600 hover:text-green-700 hover:bg-green-50 transition-colors duration-200"
-                aria-expanded="false"
+                aria-expanded={isMenuOpen}
               >
-                {isMenuOpen ? (
-                  <X className="h-6 w-6" />
-                ) : (
-                  <Menu className="h-6 w-6" />
-                )}
+                {isMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
               </button>
             </div>
           </div>
