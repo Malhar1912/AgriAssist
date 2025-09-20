@@ -7,45 +7,86 @@ import ChatWithHistory from "../components/ChatWithHistory";
 import CalculatorPage from "../components/CalculatorPage";
 import InformationPage from "../components/InformationPage";
 
+// Helper function to generate a new session ID
+const generateNewSessionId = () => `session_${Date.now()}`;
+
 export default function HomePage() {
   const [language, setLanguage] = useState("english");
   const [currentPage, setCurrentPage] = useState("home");
-  const [currentChatId, setCurrentChatId] = useState(null);
   const [initialQuery, setInitialQuery] = useState(null);
 
+  // Central state for all chat sessions
+  const [chatSessions, setChatSessions] = useState({});
+  const [selectedSessionId, setSelectedSessionId] = useState(generateNewSessionId());
+  const [inputMessage, setInputMessage] = useState('');
+
+  // Update localStorage whenever selectedSessionId changes
   useEffect(() => {
-    // Check on mount for existing session ID in localStorage
+    if (selectedSessionId) {
+      localStorage.setItem("session_id", selectedSessionId);
+    }
+  }, [selectedSessionId]);
+
+  // Load chat session from local storage on first render
+  useEffect(() => {
     const storedSessionId = localStorage.getItem("session_id");
     if (storedSessionId) {
-      setCurrentChatId(storedSessionId);
-    } else {
-      const newSessionId = `chat_${Date.now()}`;
-      setCurrentChatId(newSessionId);
-      localStorage.setItem("session_id", newSessionId);
+      setSelectedSessionId(storedSessionId);
     }
   }, []);
-
-  // Update localStorage whenever currentChatId changes
-  useEffect(() => {
-    if (currentChatId) {
-      localStorage.setItem("session_id", currentChatId);
-    }
-  }, [currentChatId]);
 
   const toggleLanguage = () => {
     setLanguage((prev) => (prev === "english" ? "malayalam" : "english"));
   };
 
-  // When starting a new chat from search, reset messages/input too
   const handleSearch = (query, imageData = null) => {
-    const sessionId = `chat_${Date.now()}`;
-    setCurrentChatId(sessionId);
+    const sessionId = generateNewSessionId();
+    setSelectedSessionId(sessionId);
     setInitialQuery(query);
     setCurrentPage("chat");
   };
 
   const handleViewAllSchemes = () => {
     setCurrentPage("information");
+  };
+
+  const handleNewChat = () => {
+    setSelectedSessionId(generateNewSessionId());
+    setInitialQuery(null);
+    setInputMessage('');
+  };
+
+  const handleChatSelect = (sessionId) => {
+    setSelectedSessionId(sessionId);
+    setCurrentPage("chat");
+  };
+
+  const handleMessagesChange = (newMessages) => {
+    setChatSessions(prevSessions => ({
+      ...prevSessions,
+      [selectedSessionId]: {
+        ...prevSessions[selectedSessionId],
+        messages: newMessages,
+      }
+    }));
+  };
+
+  const handleChatSummaryUpdate = (sessionId, summary) => {
+    setChatSessions(prevSessions => ({
+      ...prevSessions,
+      [sessionId]: {
+        ...prevSessions[sessionId],
+        ...summary,
+      },
+    }));
+  };
+  
+  const handleChatDelete = (id) => {
+    setChatSessions(prevSessions => {
+      const newSessions = { ...prevSessions };
+      delete newSessions[id];
+      return newSessions;
+    });
   };
 
   const texts = {
@@ -79,9 +120,22 @@ export default function HomePage() {
         );
       case "chat":
       case "history":
-        // Pass initialQuery to ChatWithHistory
+        const messagesForCurrentChat = chatSessions[selectedSessionId]?.messages || [];
         return (
-          <ChatWithHistory language={language} initialQuery={initialQuery} />
+          <ChatWithHistory
+            language={language}
+            initialQuery={initialQuery}
+            sessionId={selectedSessionId}
+            onNewChat={handleNewChat}
+            onChatSelect={handleChatSelect}
+            onChatDelete={handleChatDelete}
+            messages={messagesForCurrentChat}
+            onMessagesChange={handleMessagesChange}
+            chatSessions={chatSessions}
+            onChatSummaryUpdate={handleChatSummaryUpdate}
+            inputMessage={inputMessage}
+            setInputMessage={setInputMessage}
+          />
         );
       case "calculator":
         return <CalculatorPage language={language} />;
@@ -111,7 +165,6 @@ export default function HomePage() {
         currentPage={currentPage}
         setCurrentPage={setCurrentPage}
       />
-      {/* Added pt-16 to create space below the navbar. Adjust if needed. */}
       <div className="flex-1 overflow-hidden">
         {renderCurrentPage()}
       </div>

@@ -8,19 +8,17 @@ export default function ChatPage({
   onNewChat,
   initialQuery,
   messages,
-  setMessages,
+  onMessagesChange,
   inputMessage,
   setInputMessage,
-  loadingMessages = false,
-  setLoadingMessages, // Accept the new prop
 }) {
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const [isTranslating, setIsTranslating] = useState(false);
+  const [loadingMessages, setLoadingMessages] = useState(false);
+  
   const messagesEndRef = useRef(null);
   const fileInputRef = useRef(null);
-
-  // Ref to ensure initial query processed only once
   const initialQueryProcessed = useRef(false);
 
   const chatTexts = {
@@ -49,7 +47,6 @@ export default function ChatPage({
   useEffect(() => {
     if (initialQuery && !initialQueryProcessed.current && messages.length === 0 && sessionId) {
       sendMessage(initialQuery);
-      setInputMessage(initialQuery);
       initialQueryProcessed.current = true;
     }
   }, [initialQuery, sessionId]);
@@ -70,7 +67,7 @@ export default function ChatPage({
 
     if (!messageText.trim() && !imageData) return;
 
-    const newMessage = {
+    const newUserMessage = {
       id: Date.now(),
       text: messageText,
       sender: 'user',
@@ -78,9 +75,10 @@ export default function ChatPage({
       imageData: imageData,
     };
 
-    setMessages((prev) => [...prev, newMessage]);
+    // First update: Add the user's message to the state
+    onMessagesChange([...messages, newUserMessage]);
     setInputMessage('');
-    setLoadingMessages(true); // <--- START LOADING ANIMATION
+    setLoadingMessages(true);
 
     try {
       const baseURL = import.meta.env.VITE_API_BASE_URL || 'https://agriassist-api123.onrender.com/api';
@@ -118,10 +116,9 @@ export default function ChatPage({
         body: JSON.stringify(bodyPayload),
       });
 
+      let finalResponseText = '';
       if (response.ok) {
         const responseText = await response.text();
-        let finalResponseText = '';
-
         try {
           const parsedResponse = JSON.parse(responseText);
           finalResponseText =
@@ -151,24 +148,20 @@ export default function ChatPage({
           }
           setIsTranslating(false);
         }
-
-        const botMessage = {
-          id: Date.now() + 1,
-          text: finalResponseText,
-          sender: 'bot',
-          timestamp: new Date(),
-        };
-
-        setMessages((prev) => [...prev, botMessage]);
       } else {
-        const errorMessage = {
-          id: Date.now() + 1,
-          text: language === 'malayalam' ? 'ക്ഷമിക്കണം, എന്തോ തെറ്റുപറ്റി' : 'Sorry, something went wrong',
-          sender: 'bot',
-          timestamp: new Date(),
-        };
-        setMessages((prev) => [...prev, errorMessage]);
+        finalResponseText = language === 'malayalam' ? 'ക്ഷമിക്കണം, എന്തോ തെറ്റുപറ്റി' : 'Sorry, something went wrong';
       }
+
+      const botMessage = {
+        id: Date.now() + 1,
+        text: finalResponseText,
+        sender: 'bot',
+        timestamp: new Date(),
+      };
+
+      // Second update: Add the bot's message to the state
+      onMessagesChange([...messages, newUserMessage, botMessage]);
+
     } catch (error) {
       console.error('Error sending message:', error);
       const errorMessage = {
@@ -177,9 +170,11 @@ export default function ChatPage({
         sender: 'bot',
         timestamp: new Date(),
       };
-      setMessages((prev) => [...prev, errorMessage]);
+      // Third update (error case): Add the error message
+      onMessagesChange([...messages, newUserMessage, errorMessage]);
+
     } finally {
-      setLoadingMessages(false); // <--- STOP LOADING ANIMATION (regardless of success or failure)
+      setLoadingMessages(false);
     }
   };
 
@@ -251,7 +246,6 @@ export default function ChatPage({
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
-      {/* Header */}
       <div className="bg-white border-b border-gray-200 p-4">
         <div className="max-w-4xl mx-auto flex items-center justify-between">
           <h1 className="text-xl font-semibold text-gray-900">
@@ -266,8 +260,6 @@ export default function ChatPage({
           </button>
         </div>
       </div>
-
-      {/* Messages */}
       <div className="flex-1 overflow-y-auto p-4">
         <div className="max-w-4xl mx-auto space-y-4">
           {messages.map((message) => (
@@ -309,7 +301,6 @@ export default function ChatPage({
               </div>
             </div>
           ))}
-
           {(loadingMessages || isTranslating) && (
             <div className="flex justify-start">
               <div className="bg-white border border-gray-200 rounded-2xl p-4">
@@ -330,12 +321,9 @@ export default function ChatPage({
               </div>
             </div>
           )}
-
           <div ref={messagesEndRef} />
         </div>
       </div>
-
-      {/* Input */}
       <div className="bg-white border-t border-gray-200 p-4">
         <div className="max-w-4xl mx-auto">
           <div className="flex items-end space-x-2">
@@ -348,7 +336,6 @@ export default function ChatPage({
                 className="flex-1 bg-transparent resize-none max-h-32 px-3 py-2 text-gray-900 placeholder-gray-500 border-none outline-none"
                 rows={1}
               />
-
               <div className="flex items-center space-x-1">
                 <button
                   onClick={startVoiceRecognition}
@@ -362,7 +349,6 @@ export default function ChatPage({
                 >
                   <Mic className="h-4 w-4" />
                 </button>
-
                 <button
                   onClick={() => fileInputRef.current?.click()}
                   title={chatTexts[language].imageUpload}
@@ -372,7 +358,6 @@ export default function ChatPage({
                 </button>
               </div>
             </div>
-
             <button
               onClick={() => sendMessage()}
               disabled={!inputMessage.trim() || loadingMessages || isTranslating}
@@ -383,8 +368,6 @@ export default function ChatPage({
           </div>
         </div>
       </div>
-
-      {/* Hidden file input */}
       <input ref={fileInputRef} type="file" accept="image/*" onChange={handleImageUpload} className="hidden" />
     </div>
   );
